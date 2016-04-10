@@ -1,0 +1,198 @@
+---
+title: "Practical Machine Learning Assignment Report"
+author: "Somnath S. Barole"
+date: "April 9, 2016"
+output: md_document
+---
+
+### Executive summary:
+
+This document is the report created for Practical machine learning assignment. The intent of the project is to analyze, build the models using accelerometers data mounted on the belt, forearm, arm, and dumbell of 6 participants while doing barbell lifts and predict how well they did the exercise. In the begining of the session information of the input data is explained and in subsequent session given input data is cleaned by removing NAs and unwanted variables. With the given data various models are build and evaluated using different model building technique such as RPART, Naive Bayes, Linear Discriminant Analysis (LDA) and Random forest. Out of all the models it seems random forest model has better accuracy, sensitivity, specificity and precision; this best build model is selected and  used for prediction on test data set with 20 different cases.
+
+### Input data information:   
+
+Now a days it is possible to measure and collect large amount of data  using devices like Jawbone Up, Nike FuelBand, and Fitbit for personal activity and this data can be used to improve health, to find patterns in the behavior or quantify how much of a particular activity is carried out.   
+
+The given data set consist of accelerometers measurements taken on belt, forearm, arm and dumbell of 6 participants while they doing barbell lifts. These 6 participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways marked as class A, B, C, D and E under supervison of an experienced weight lifter.  The description of these different classes is as below.  
+
+Class A: Exactly according to the specification   
+Class B: Throwing the elbows to the front   
+Class C: Lifting the dumbbell only halfway   
+Class D: Lowering the dumbbell only halfway   
+Class E: Throwing the hips to the front
+
+So class-A corresponds to specified execution of exercise and other four classes are mistakes done during exercise. You can find out more details of related information at 
+<http://groupware.les.inf.puc-rio.br/har>   
+
+The training and test data set can be downloaded from below links.  
+**Training data set:** <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>   
+**Test data set:** <https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+### Reading and Cleaning the Data:    
+
+The training and test data sets are downloaded from the links provided above. The below chunk of code reads the input data.
+
+```{r}
+setwd("D:/DATA SCIENCE/8.Practical Machine Learning/Assignment")
+training <- read.csv("pml-training.csv")
+test <- read.csv("pml-testing.csv")
+```
+
+Now we can split given training data set in training subset ans testing subset so that we can build model based on training subset and evaluate those models on testing subset.  
+
+```{r}
+set.seed(111)
+library(caret)
+inTrain <- createDataPartition(training$classe, p=0.7, list=FALSE)
+training_sub <- training[inTrain, ]
+testing_sub <- training[-inTrain, ]
+
+#head(training_sub)
+```
+
+If we look at few observations in the data set we can see that it has lot of missing values and NA. Before proceeding ahead we need to clen the data set. As a first step we can use function nearZeroVar() to identify which columns has identical values (with nearly zero variance) and remove it.   
+
+```{r}
+NZV <- nearZeroVar(training_sub)
+#NZV
+
+training_sub <- training_sub[, -NZV]
+testing_sub <- testing_sub[, -NZV]
+#dim(training_sub)
+#dim(testing_sub)
+```
+
+In second step we can identify the columns containing more than 90% of NAs and remove those columns from data set.
+
+```{r}
+withNAs <- sapply(training_sub, function(x) mean(is.na(x)) > 0.9)
+training_sub <- training_sub[, withNAs == FALSE]
+testing_sub <- testing_sub[, withNAs == FALSE]
+#dim(training_sub)
+#dim(testing_sub)
+#head(training_sub)
+```
+
+Also the first few columns in the data set like X, user-name, raw-timestamp-part1, raw-timestamp-part2, cvtd-timestamp, num-window are not predictors and not needed for prediction so we can remove them too.
+
+```{r}
+training_sub <- training_sub[, -(1:6)]
+testing_sub <- testing_sub[, -(1:6)]
+
+#dim(training_sub)
+#dim(testing_sub)
+#head(training_sub)
+#head(training_sub)
+```
+
+### Model building, Evaluation and Model selection:   
+
+In this sections we will build different models using training subset and evaluate them based on model accuracy. The different algorithmas that are considered are Recursive Partitioning and Regression Trees (RPART), Naive Bayes, Linear Discriminant Analysis (LDA) and Random forest.   
+
+#### 1.Recursive Partitioning and Regression Trees (RPART):   
+To start with let us build RPART model and evaluate it.  
+
+```{r, cache=TRUE, message=FALSE}
+library(rattle)
+
+model_dp_rpart <- train(classe ~ ., data=training_sub, method = "rpart")
+#model_dp_rpart
+fancyRpartPlot(model_dp_rpart$finalModel)
+
+confusionMatrix(predict(model_dp_rpart, testing_sub), testing_sub$classe)
+
+```
+
+From the output of confusion matrix we see that RPART model has very poor accuracy  indicating that classifier is correct very few times while predicting the classes and this is not good estimate of out of sample error. It has better sensitivity that means it is better at predicting true positives but has quite low specificity  as well as low precision i.e Pos Pred Value. 
+ 
+
+#### 2.Naive Bayes model with repeated k-fold cross validation:   
+
+```{r, warning=FALSE, cache=TRUE, message=FALSE}
+train_control_rkf_nb <- trainControl(method = "repeatedcv", number = 5, repeats = 2)
+model_rkf_nb <- train(classe ~ ., data=training_sub, trControl=train_control_rkf_nb, method="nb")
+#model_rkf_nb
+
+confusionMatrix(predict(model_rkf_nb, testing_sub), testing_sub$classe)
+    
+```
+
+The Naive Bayes model has quite better accuracy compared to RPART model still not good estimate of out of sample error. It has good sensitivity and specificity but low Pos Pred Value. 
+
+#### 3.Linear Discriminant Analysis (LDA) with repeated k-fold cross validation:   
+
+```{r, warning=FALSE, cache=TRUE, message=FALSE}
+train_control_rkf_lda <- trainControl(method = "repeatedcv", number = 5, repeats = 2)
+model_rkf_lda <- train(classe ~ ., data=training_sub, trControl=train_control_rkf_lda, method="lda")
+#model_rkf_lda
+
+confusionMatrix(predict(model_rkf_lda, testing_sub), testing_sub$classe)
+
+```
+
+The LDA model has moderate accuracy with quite good sensitivity, specificity and  Pos Pred Value but we don't see much improvement over previous models.  
+
+
+#### 4.Random Forest:
+
+```{r, cache=TRUE, message=FALSE}
+library(randomForest)
+train_control_rf <- trainControl(method = "cv", number = 5, verbose=FALSE)
+model_kf_rf <- train(classe ~ ., data=training_sub, method="rf", trControl=train_control_rf)
+#model_kf_rf
+
+confusionMatrix(predict(model_kf_rf, testing_sub), testing_sub$classe)
+
+```
+
+Random forest model has very high accuracy, sensitivity, specificity as well as excellent Pos Pred Value and Neg Pred Value compared to all other models explored previously.
+
+Now we plot the accuracy vs number of number of randomly selected predictors for this model.   
+
+```{r}
+plot(model_kf_rf)
+```
+   
+
+Here we will estimate out of sample error rate for random forest model and we see that this value is very very low.
+
+```{r, cache=TRUE, message=FALSE}
+
+pred_kf_rf <- predict(model_kf_rf, testing_sub)
+total_errors <- sum(pred_kf_rf != testing_sub$classe)
+
+ErrorRate <- total_errors / length(testing_sub$classe)
+ErrorRate    
+```
+
+   
+### Predictions on test data with Random forest model:
+
+Before we apply our best model i.e. random forest model on test data set, we need to clean test data set in similar fashion we cleaned training dataset.  
+
+```{r}
+NZV_test <- nearZeroVar(test)
+#NZV_test
+
+test <- test[, -NZV_test]
+
+withNAs_test <- sapply(test, function(x) mean(is.na(x)) > 0.9)
+test <- test[, withNAs_test == FALSE]
+
+test <- test[, -(1:6)]
+#dim(test)
+
+```
+
+Now we will apply trained random forest model to test data.
+
+```{r, message=FALSE}
+# Predcting with random forest
+predict_test <- predict(model_kf_rf, test)
+predict_test
+
+```
+
+These predictions are used in the quiz and it is observed that all of these predictions are accurate. So we can conclude that all of the models random forest is the best and very robust model.  
+
+
